@@ -11,6 +11,7 @@ BORDERWIDTH = 4
 
 WIDTH = 1000
 
+# TODO problem with colors is that it is not plotted in the order
 
 class Ribbon:
     def __init__(self):
@@ -58,49 +59,98 @@ class Ribbon:
 
     def fold_start(self, grid, is_vertical, pos, update_function):
         def aux(evt):
-            print("fold_start", is_vertical, pos)
+            self.elements = self.elements[::-1]
+            self.fold_end(grid, is_vertical, pos, lambda :None)(None)
+            self.elements = self.elements[::-1]
+            self.is_top_left = not self.is_top_left
             update_function()
         return aux
 
+    def fold_end_horizontal(self, grid, pos):
+        if grid.contains(pos,len(grid[0])-1,self.elements[-1]):
+            j = len(grid.grid[0])-1
+            diff = -1
+        elif grid.contains(pos, 0, self.elements[-1]):
+            j = 0
+            diff = 1
+        else:
+            raise ValueError("end not on the end ???")
+        while 0 <= j < len(grid[pos]) and len(grid[pos][j]) == 1:
+            self.elements.pop()
+            grid[pos][j] = []
+            j += diff
+        if j < 0 or j == len(grid[0]):
+            return
+        height = grid.height(pos, j, self.elements[-1])
+        if height == 0:
+            is_on_top = False
+        elif height == len(grid[pos][j])-1:
+            is_on_top = True
+        else:
+            raise ValueError("Not possible to turn, should raise error later")
+        while self.elements and not self.elements[-1].isTurn and grid.height(pos, j, self.elements[-1]) == (len(grid[pos][j])-1 if is_on_top else 0):
+            grid[pos][j].remove(self.elements[-1])
+            self.elements.pop()
+            j += diff
+        if self.elements:
+            if self.elements[-1].isTurn:
+                self.elements.pop()
+            else:
+                self.elements.append(RibbonElement(True))
+        while 0 <= j < len(grid[pos]):
+            self.elements.append(RibbonElement())
+            if is_on_top:
+                grid[pos][j].append(self.elements[-1])
+            else:
+                grid[pos][j].insert(0, self.elements[-1])
+            j += diff
+
+    def fold_end_vertical(self, grid, pos):
+        if grid.contains(len(grid)-1,pos,self.elements[-1]):
+            i = len(grid.grid)-1
+            diff = -1
+        elif grid.contains(0, pos, self.elements[-1]):
+            i = 0
+            diff = 1
+        else:
+            raise ValueError("end not on the end ???")
+        while 0 <= i < len(grid) and len(grid[i][pos]) == 1:
+            self.elements.pop()
+            grid[i][pos] = []
+            i += diff
+        if i < 0 or i == len(grid):
+            return
+        height = grid.height(i, pos, self.elements[-1])
+        if height == 0:
+            is_on_top = False
+        elif height == len(grid[i][pos])-1:
+            is_on_top = True
+        else:
+            raise ValueError("Not possible to turn, should raise error later")
+        while self.elements and not self.elements[-1].isTurn and grid.height(i, pos, self.elements[-1]) == (len(grid[i][pos])-1 if is_on_top else 0):
+            grid[i][pos].remove(self.elements[-1])
+            self.elements.pop()
+            i += diff
+        if self.elements:
+            if self.elements[-1].isTurn:
+                self.elements.pop()
+            else:
+                self.elements.append(RibbonElement(True))
+        while 0 <= i < len(grid):
+            self.elements.append(RibbonElement())
+            if is_on_top:
+                grid[i][pos].append(self.elements[-1])
+            else:
+                grid[i][pos].insert(0, self.elements[-1])
+            i += diff
+        
+
     def fold_end(self, grid, is_vertical, pos, update_function):
         def aux(evt):
-            
             if not is_vertical:# is_horizontal
-                i = pos
-                if grid.contains(pos,len(grid[0])-1,self.elements[-1]):
-                    j = len(grid.grid[0])-1
-                    diff = -1
-                elif grid.contains(pos, 0, self.elements[-1]):
-                    j = 0
-                    diff = 1
-                else:
-                    raise ValueError("end not on the end ???")
-                print(grid.height(pos, j, self.elements[-1]))
-                height = grid.height(pos, j, self.elements[-1])
-                if height == 0:
-                    is_on_top = False
-                elif height == len(grid[pos][j])-1:
-                    is_on_top = True
-                else:
-                    raise ValueError("Not possible to turn, should raise error later")
-                while self.elements and not self.elements[-1].isTurn and grid.height(pos, j, self.elements[-1]) == (len(grid[pos][j])-1 if is_on_top else 0):
-                    grid[pos][j].remove(self.elements[-1])
-                    self.elements.pop()
-                    j += diff
-                print(j)
-                if self.elements:
-                    if self.elements[-1].isTurn:
-                        self.elements.pop()
-                    else:
-                        self.elements.append(RibbonElement(True))
-                while 0 <= j < len(grid[pos]):
-                    self.elements.append(RibbonElement())
-                    if is_on_top:
-                        grid[pos][j].append(self.elements[-1])
-                    else:
-                        grid[pos][j].insert(0, self.elements[-1])
-                    j += diff
-                print(j,diff, is_on_top)
+                self.fold_end_horizontal(grid, pos)
+            else:
+                self.fold_end_vertical(grid,pos)
                                   
             print("fold_end", is_vertical, pos)
             update_function()
@@ -113,6 +163,9 @@ class Ribbon:
 class RibbonElement:
     def __init__(self, isTurn = False):
         self.isTurn = isTurn
+
+    def __repr__(self):
+        return ("Turn-" if self.isTurn else "")+str(id(self)%1000)
 
 class Grid:
     def __init__(self,grid):
@@ -132,6 +185,7 @@ class Grid:
 
                                   
 
+temp_mul = 2
 class State:
     def __init__(self, grid, horizontal_ribbons, vertical_ribbons):
         self.grid=grid
@@ -153,7 +207,7 @@ class State:
         for i in range(len(self.grid)):
             xposs, yposs = self.horizontal[i].generate_positions()
             xpos = 0 if self.horizontal[i].is_top_left else WIDTH
-            j = 0 if self.horizontal[i].is_top_left else N
+            j = 0 if self.horizontal[i].is_top_left else N-1
             direction = 1 if self.horizontal[i].is_top_left else -1
             start_ypos = (5/6+i)*cell_size
             cpt = 0
@@ -164,16 +218,16 @@ class State:
                     j += direction
                 else:
                     height = self.grid.height(i,j,elt)
-                    intersections[i][j][height] = ((BORDERWIDTH+(xpos+xposs[cpt])*cell_size-direction*7, BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt+1])*cell_size+direction*7, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3),
-                                                   (main_colors[i%8], dark_colors20[i%8]),
+                    intersections[i][j][height] = ((BORDERWIDTH+xpos+xposs[cpt]*cell_size-direction*temp_mul, BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt+1]*cell_size+direction*temp_mul, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3),
+                                                   (main_colors[i%8], dark_colors20[i%8])[::direction if self.horizontal[i] else -direction],
                                                    f"horizontal-start-{i}" if elt_id == 0 else f"horizontal-end-{i}" if elt_id == len(self.horizontal[i].elements)-1 else "nothing",
-                                                   (BORDERWIDTH+(xpos+xposs[cpt])*cell_size, BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt+1])*cell_size, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3))# todo for tag add test if not surrounded
+                                                   (BORDERWIDTH+xpos+xposs[cpt]*cell_size, BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt+1]*cell_size, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3))# todo for tag add test if not surrounded
                     cpt += 1
                     j += direction
         for j in range(len(self.vertical)):
             xposs, yposs = self.vertical[j].generate_positions()
             xpos = 0 if self.vertical[j].is_top_left else WIDTH
-            i = 0 if self.vertical[j].is_top_left else N
+            i = 0 if self.vertical[j].is_top_left else N-1
             direction = 1 if self.vertical[j].is_top_left else -1
             start_ypos = (5/6+j)*cell_size
             cpt = 0
@@ -184,10 +238,10 @@ class State:
                     i += direction
                 else:
                     height = self.grid.height(i,j,elt)
-                    intersections[i][j][height] = ((BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt])*cell_size-direction*3, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt+1])*cell_size+direction*3),
-                                                   (main_colors[j%7+8], dark_colors20[j%7+8]),
+                    intersections[i][j][height] = ((BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt]*cell_size-direction*temp_mul, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt+1]*cell_size+direction*temp_mul),
+                                                   (main_colors[j%7+8], dark_colors20[j%7+8])[::direction if self.horizontal[i] else -direction],
                                                    f"vertical-start-{j}" if elt_id == 0 else f"vertical-end-{j}" if elt_id == len(self.vertical[j].elements)-1 else "nothing",
-                                                   (BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt])*cell_size-direction, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3, BORDERWIDTH+(xpos+xposs[cpt+1])*cell_size+direction))
+                                                   (BORDERWIDTH+start_ypos+yposs[cpt]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt]*cell_size-direction, BORDERWIDTH+start_ypos+yposs[cpt+1]*cell_size/3, BORDERWIDTH+xpos+xposs[cpt+1]*cell_size+direction))
                     cpt += 1
                     i += direction
         return intersections        
@@ -218,11 +272,8 @@ class Application(Frame):
         self.bind_all("<Escape>", lambda x:self.quit())
         self.canv = Canvas(self, height = size, width = size, relief="ridge", borderwidth = BORDERWIDTH,bg="white")#,bg="#404040")
         self.canv.grid(column = 1, columnspan = 2*nb_ribbons+3, row = 1, rowspan = 2*nb_ribbons+3)
-        #self.canv.bind("<Button-1>", self._click)
 
         self.state = generate_random_state(nb_ribbons)
-        self.state.plot()
-        #self.state.vertical[2].invert()
         self.update_canvas()
 
     def update_canvas(self):
@@ -233,20 +284,15 @@ class Application(Frame):
             for j in range(len(coordinates[i])):
                 for k in range(len(coordinates[i][j])):
                     elt,col,tag,back_elt = coordinates[i][j][k]
-                    self.canv.create_line(back_elt, width=line_width+10, fill="#000000")
-                    self.canv.create_line(elt, width=line_width, fill=col[0], activefill=col[1] if tag!="nothing" else col[0], tags=tag)#, activestipple="gray75", tags=tag)
+                    self.canv.create_line(back_elt, width=line_width*1.2, fill="#000000")
+                    self.canv.create_line(elt, width=line_width, fill=col[0], activefill=col[1] if tag!="noething" else col[0], tags=tag)#, activestipple="gray75", tags=tag)
         for is_vertical in [True, False]:
             for i in range(len(self.state.grid)):
                 self.canv.tag_bind(f"{'vertical' if is_vertical else 'horizontal'}-start-{i}","<Button-1>", (self.state.vertical if is_vertical else self.state.horizontal)[i].fold_start(self.state.grid, is_vertical, i, self.update_canvas))
                 self.canv.tag_bind(f"{'vertical' if is_vertical else 'horizontal'}-end-{i}","<Button-1>", (self.state.vertical if is_vertical else self.state.horizontal)[i].fold_end(self.state.grid, is_vertical, i, self.update_canvas))
         
-
-    def _click(self, event):
-        x, y = event.x-BORDERWIDTH, event.y-BORDERWIDTH
-        print(x,y)
-
                     
 
 if __name__ == "__main__":
-    app = Application(5)
+    app = Application(10)
     app.mainloop()
